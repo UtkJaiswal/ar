@@ -1,0 +1,2345 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>3D Molecular AR Viewer</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    
+    <!-- A-Frame and AR.js -->
+    <script src="https://aframe.io/releases/1.4.2/aframe.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js@3.4.4/aframe/build/aframe-ar.js"></script>
+    
+    <!-- 3Dmol.js for molecular visualization -->
+    <script src="https://3dmol.csb.pitt.edu/build/3Dmol-min.js"></script>
+    
+    <!-- Three.js for 3D graphics -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r158/three.min.js"></script>
+    
+    <style>
+      body { 
+        margin: 0; 
+        overflow: hidden; 
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      }
+      
+      /* Main UI Container */
+      #app-container {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        z-index: 1000;
+        pointer-events: none;
+      }
+      
+      /* Input Panel */
+      #input-panel {
+        position: absolute;
+        top: 20px;
+        left: 20px;
+        right: 350px;
+        background: rgba(255, 255, 255, 0.95);
+        border-radius: 15px;
+        padding: 20px;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+        pointer-events: auto;
+        backdrop-filter: blur(10px);
+        z-index: 1001;
+      }
+      
+      .input-group {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 15px;
+        align-items: center;
+      }
+      
+      #chemical-input {
+        flex: 1;
+        padding: 12px 16px;
+        border: 2px solid #e0e0e0;
+        border-radius: 25px;
+        font-size: 16px;
+        outline: none;
+        transition: border-color 0.3s;
+      }
+      
+      #chemical-input:focus {
+        border-color: #4285f4;
+      }
+      
+      .btn {
+        padding: 12px 20px;
+        border: none;
+        border-radius: 25px;
+        font-size: 16px;
+        cursor: pointer;
+        transition: all 0.3s;
+        font-weight: 500;
+      }
+      
+      .btn-primary {
+        background: #4285f4;
+        color: white;
+      }
+      
+      .btn-primary:hover {
+        background: #3367d6;
+        transform: translateY(-2px);
+      }
+      
+      .btn-secondary {
+        background: #34a853;
+        color: white;
+      }
+      
+      .btn-secondary:hover {
+        background: #2d8f47;
+        transform: translateY(-2px);
+      }
+      
+      .btn-ar {
+        background: #ea4335;
+        color: white;
+      }
+      
+      .btn-ar:hover {
+        background: #d33426;
+        transform: translateY(-2px);
+      }
+      
+      /* Molecule Info Panel */
+      #molecule-info {
+        position: absolute;
+        top: 20px;
+        right: 20px;
+        background: rgba(255, 255, 255, 0.95);
+        border-radius: 15px;
+        padding: 20px;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+        pointer-events: auto;
+        backdrop-filter: blur(10px);
+        max-width: 300px;
+        display: block;
+        z-index: 1001;
+      }
+      
+      .molecule-title {
+        font-size: 18px;
+        font-weight: bold;
+        color: #333;
+        margin-bottom: 10px;
+      }
+      
+      .molecule-detail {
+        font-size: 14px;
+        color: #666;
+        margin-bottom: 5px;
+      }
+      
+      /* 3D Viewer Container */
+      #viewer-container {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        z-index: 1;
+      }
+      
+      /* AR Mode Overlay */
+      #ar-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        z-index: 2000;
+        display: none;
+        pointer-events: none;
+      }
+      
+      #ar-controls {
+        position: absolute;
+        bottom: 20px;
+        left: 20px;
+        right: 20px;
+        background: rgba(0, 0, 0, 0.7);
+        border-radius: 15px;
+        padding: 15px;
+        pointer-events: auto;
+        text-align: center;
+      }
+      
+      .ar-btn {
+        background: rgba(255, 255, 255, 0.2);
+        color: white;
+        border: 1px solid rgba(255, 255, 255, 0.3);
+        border-radius: 20px;
+        padding: 10px 20px;
+        margin: 0 5px;
+        cursor: pointer;
+        transition: all 0.3s;
+      }
+      
+      .ar-btn:hover {
+        background: rgba(255, 255, 255, 0.3);
+      }
+      
+      /* Loading Indicator */
+      #loading {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background: rgba(0, 0, 0, 0.8);
+        color: white;
+        padding: 20px 30px;
+        border-radius: 10px;
+        z-index: 3000;
+      }
+      
+      /* Mobile Optimizations */
+      @media (max-width: 768px) {
+        /* Hide UI elements in AR mode */
+        #ar-overlay #input-panel,
+        #ar-overlay #molecule-info,
+        #ar-overlay #section-tabs {
+          display: none !important;
+        }
+        
+        /* Compact input panel for mobile */
+        #input-panel {
+          top: 10px;
+          left: 10px;
+          right: 10px;
+          padding: 12px;
+          border-radius: 10px;
+          max-height: 140px;
+          overflow: hidden;
+        }
+        
+        .input-group {
+          flex-direction: row;
+          gap: 6px;
+          flex-wrap: wrap;
+          margin-bottom: 8px;
+        }
+        
+        #chemical-input {
+          flex: 1;
+          min-width: 120px;
+          font-size: 16px;
+          padding: 8px 10px;
+        }
+        
+        .btn {
+          padding: 8px 10px;
+          font-size: 12px;
+          white-space: nowrap;
+          min-width: 60px;
+        }
+        
+        /* Molecule info - positioned to avoid overlap */
+        #molecule-info {
+          top: auto;
+          bottom: 120px;
+          left: 10px;
+          right: 10px;
+          max-width: none;
+          padding: 8px;
+          border-radius: 8px;
+          font-size: 11px;
+          max-height: 70px;
+          overflow: hidden;
+        }
+        
+        .molecule-title {
+          font-size: 12px;
+          margin-bottom: 3px;
+        }
+        
+        .molecule-detail {
+          font-size: 10px;
+          margin-bottom: 1px;
+        }
+        
+        /* AR controls - positioned to avoid overlap */
+        #ar-controls {
+          bottom: 30px;
+          left: 50%;
+          transform: translateX(-50%);
+          width: auto;
+          padding: 6px 10px;
+          border-radius: 20px;
+          display: flex;
+          gap: 6px;
+          background: rgba(0, 0, 0, 0.8);
+          z-index: 2000;
+        }
+        
+        .ar-btn {
+          padding: 8px 12px;
+          font-size: 11px;
+          border-radius: 15px;
+          min-width: 50px;
+          min-height: 35px;
+        }
+        
+        /* Section tabs - smaller and less intrusive */
+        #section-tabs {
+          top: 10px;
+          left: 50%;
+          transform: translateX(-50%);
+          padding: 3px;
+          border-radius: 20px;
+          z-index: 1001;
+        }
+        
+        .tab-btn {
+          padding: 6px 12px;
+          font-size: 12px;
+        }
+        
+        /* AR UI elements positioning */
+        #ar-ui-elements {
+          z-index: 2001;
+        }
+        
+        #ar-input-panel {
+          top: 70px !important;
+          left: 10px !important;
+          right: 10px !important;
+          padding: 8px !important;
+        }
+        
+        #ar-molecule-info {
+          top: 130px !important;
+          left: 10px !important;
+          right: 10px !important;
+          padding: 8px !important;
+          font-size: 11px !important;
+        }
+        
+        #ui-toggle {
+          top: 15px !important;
+          right: 15px !important;
+          width: 40px !important;
+          height: 40px !important;
+          font-size: 16px !important;
+        }
+        
+        /* AI Chat mobile optimization */
+        #ai-chat {
+          bottom: 10px !important;
+          left: 10px !important;
+          right: 10px !important;
+          max-height: 250px !important;
+          padding: 10px !important;
+        }
+        
+        #chat-messages {
+          max-height: 150px !important;
+          font-size: 12px !important;
+        }
+        
+        #chat-input {
+          font-size: 14px !important;
+          padding: 6px !important;
+        }
+      }
+      
+      /* Permission Request Modal */
+      #permission-modal {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.8);
+        z-index: 5000;
+        display: none;
+        align-items: center;
+        justify-content: center;
+      }
+      
+      .permission-content {
+        background: white;
+        padding: 30px;
+        border-radius: 15px;
+        text-align: center;
+        max-width: 400px;
+        margin: 20px;
+      }
+      
+      .permission-content h3 {
+        margin-bottom: 15px;
+        color: #333;
+      }
+      
+      .permission-content p {
+        margin-bottom: 20px;
+        color: #666;
+        line-height: 1.5;
+      }
+      
+      .permission-btn {
+        background: #4285f4;
+        color: white;
+        border: none;
+        padding: 12px 24px;
+        border-radius: 25px;
+        font-size: 16px;
+        cursor: pointer;
+        margin: 5px;
+      }
+      
+      .permission-btn:hover {
+        background: #3367d6;
+      }
+      
+      .spinner {
+        border: 3px solid rgba(255, 255, 255, 0.3);
+        border-top: 3px solid white;
+        border-radius: 50%;
+        width: 20px;
+        height: 20px;
+        animation: spin 1s linear infinite;
+        margin: 0 auto 10px;
+      }
+      
+      @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+      
+      /* Section Tabs */
+      #section-tabs {
+        position: absolute;
+        top: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: rgba(255, 255, 255, 0.95);
+        border-radius: 25px;
+        padding: 5px;
+        box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+        pointer-events: auto;
+        backdrop-filter: blur(10px);
+      }
+      
+      .tab-btn {
+        padding: 10px 20px;
+        border: none;
+        border-radius: 20px;
+        background: transparent;
+        cursor: pointer;
+        transition: all 0.3s;
+        font-weight: 500;
+      }
+      
+      .tab-btn.active {
+        background: #4285f4;
+        color: white;
+      }
+      
+      .tab-btn:not(.active) {
+        color: #666;
+      }
+      
+      .tab-btn:hover:not(.active) {
+        background: rgba(66, 133, 244, 0.1);
+      }
+
+
+    </style>
+  </head>
+  <body>
+    <!-- Main App Container -->
+    <div id="app-container">
+      <!-- Section Tabs -->
+      <div id="section-tabs">
+        <button class="tab-btn active" onclick="switchSection('chemistry')">🧪 Chemistry</button>
+      </div>
+      
+      <!-- Input Panel -->
+      <div id="input-panel">
+        <div class="input-group">
+          <input type="text" id="chemical-input" placeholder="Enter chemical name, SMILES, or formula (e.g., 'water', 'CCO', 'H2O')" onkeypress="handleKeyPress(event)">
+          <button class="btn btn-primary" onclick="generateMolecule()">Generate 3D</button>
+          <button class="btn btn-ar" onclick="viewInAR()">View in AR</button>
+        </div>
+        <div class="input-group">
+          <button class="btn btn-secondary" onclick="exportMolecule()">Export</button>
+          <button class="btn btn-secondary" onclick="takeScreenshot()">Screenshot</button>
+          <button class="btn btn-secondary" onclick="resetView()">Reset View</button>
+        </div>
+      </div>
+      
+            <!-- Molecule Info Panel -->
+      <div id="molecule-info">
+        <div class="molecule-title" id="molecule-name">No molecule loaded</div>
+        <div class="molecule-detail" id="molecule-formula">Formula: -</div>
+        <div class="molecule-detail" id="molecule-weight">Molecular Weight: -</div>
+        <div class="molecule-detail" id="molecule-type">Type: -</div>
+ 
+      </div>
+      
+
+      
+
+      
+      <!-- Loading Indicator -->
+      <div id="loading">
+        <div class="spinner"></div>
+        <div id="loading-text">Generating 3D structure...</div>
+      </div>
+      
+
+      
+      <!-- Permission Request Modal -->
+      <div id="permission-modal">
+        <div class="permission-content">
+          <h3>🔐 Permission Required</h3>
+          <p>This app needs access to your device's motion sensors for the best AR experience. Please allow access when prompted.</p>
+          <button class="permission-btn" id="allow-permissions-btn">Allow Permissions</button>
+          <button class="permission-btn" id="continue-without-btn" style="background: #666;">Continue Without</button>
+        </div>
+      </div>
+    </div>
+    
+    <!-- 3D Viewer Container -->
+    <div id="viewer-container">
+      <div id="3dmol-container" style="width: 100%; height: 100%;"></div>
+    </div>
+    
+          <!-- AR Overlay -->
+      <div id="ar-overlay">
+        <!-- UI Toggle Button -->
+        <button id="ui-toggle" class="ar-btn" onclick="toggleUI()" style="position: absolute; top: 20px; right: 20px; z-index: 2001; background: rgba(0,0,0,0.7); color: white; border: none; border-radius: 50%; width: 50px; height: 50px; font-size: 20px;">👁️</button>
+        
+        <!-- Hidden UI Elements -->
+        <div id="ar-ui-elements" style="display: none;">
+          <div id="ar-input-panel" style="position: absolute; top: 80px; left: 10px; right: 10px; background: rgba(255,255,255,0.9); border-radius: 10px; padding: 10px; z-index: 2000;">
+            <div class="input-group">
+              <input type="text" id="ar-chemical-input" placeholder="Enter chemical name" style="flex: 1; padding: 8px; border: 1px solid #ccc; border-radius: 5px; font-size: 14px;">
+              <button class="btn btn-primary" onclick="generateMoleculeAR()" style="padding: 8px 12px; font-size: 14px;">Generate</button>
+            </div>
+          </div>
+          
+          <div id="ar-molecule-info" style="position: absolute; top: 150px; left: 10px; right: 10px; background: rgba(255,255,255,0.9); border-radius: 10px; padding: 10px; z-index: 2000; font-size: 12px;">
+            <div id="ar-molecule-name" style="font-weight: bold; margin-bottom: 5px;">No molecule loaded</div>
+            <div id="ar-molecule-formula">Formula: -</div>
+            <div id="ar-molecule-weight">Weight: -</div>
+          </div>
+        </div>
+        
+        <!-- AR controls removed - using UI toggle button instead -->
+      </div>
+    
+    <!-- AR Scene -->
+    <a-scene id="ar-scene" embedded arjs="sourceType: webcam; debugUIEnabled: false;" style="display: none;">
+      <a-marker preset="hiro">
+        <a-entity id="ar-molecule" position="0 0 0" scale="1 1 1" rotation="0 0 0">
+          <!-- 3D molecule will be rendered here -->
+        </a-entity>
+      </a-marker>
+      <a-entity camera></a-entity>
+    </a-scene>
+
+    <script>
+      // Global variables
+      let currentSection = 'chemistry';
+      let currentMolecule = null;
+      let viewer = null;
+      let arViewer = null;
+      
+
+      
+
+      
+      // Initialize the application
+      document.addEventListener('DOMContentLoaded', function() {
+        initializeViewer();
+        initializeAR();
+        console.log('3D Molecular AR Viewer initialized');
+        
+        // Add fallback rendering if 3Dmol.js fails
+        setTimeout(() => {
+          if (!viewer) {
+            console.log('3Dmol.js failed, using fallback rendering');
+            createFallbackViewer();
+          }
+        }, 2000);
+        
+        // Hide loading indicator on startup
+        hideLoading();
+      });
+      
+      // Create fallback viewer using Three.js
+      function createFallbackViewer() {
+        const container = document.getElementById('3dmol-container');
+        container.innerHTML = '<div id="fallback-viewer" style="width: 100%; height: 100%; background: #f0f0f0; display: flex; align-items: center; justify-content: center; color: #666;">3D Viewer Loading...</div>';
+        
+        // Initialize Three.js scene
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        
+        renderer.setSize(container.clientWidth, container.clientHeight);
+        renderer.setClearColor(0xffffff);
+        container.appendChild(renderer.domElement);
+        
+        // Add lighting
+        const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
+        scene.add(ambientLight);
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        directionalLight.position.set(10, 10, 5);
+        scene.add(directionalLight);
+        
+        camera.position.z = 5;
+        
+        // Animation loop
+        function animate() {
+          requestAnimationFrame(animate);
+          renderer.render(scene, camera);
+        }
+        animate();
+        
+        // Store fallback viewer
+        window.fallbackViewer = { scene, camera, renderer };
+        console.log('Fallback Three.js viewer created');
+      }
+      
+      // Initialize 3Dmol.js viewer
+      function initializeViewer() {
+        try {
+          viewer = $3Dmol.createViewer('3dmol-container', {
+            backgroundColor: 'white',
+            antialias: true,
+            defaultcolors: $3Dmol.rasmolElementColors
+          });
+          
+          // Set up viewer controls
+          viewer.setStyle({}, {stick: {}});
+          viewer.zoomTo();
+          console.log('3Dmol.js viewer initialized successfully');
+          
+          // Show a welcome message instead of loading default molecule
+          const container = document.getElementById('3dmol-container');
+          container.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: #666; font-size: 18px; text-align: center;"><div><h3>🧪 3D Molecular Viewer</h3><p>Enter a chemical name above and click "Generate 3D" to view molecules</p><p>Try: water, methane, ethanol, sulfuric acid</p></div></div>';
+          
+        } catch (error) {
+          console.error('Error initializing 3Dmol.js viewer:', error);
+        }
+      }
+      
+      // Initialize AR scene
+      function initializeAR() {
+        const arScene = document.getElementById('ar-scene');
+        const arMolecule = document.getElementById('ar-molecule');
+        
+        // Set up AR molecule entity
+        arMolecule.setAttribute('gesture-handler', '');
+        console.log('AR scene initialized');
+      }
+      
+      // Section switching
+      function switchSection(section) {
+        currentSection = section;
+        
+        // Update tab buttons
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+          btn.classList.remove('active');
+        });
+        event.target.classList.add('active');
+        
+        // Update UI based on section
+        if (section === 'chemistry') {
+          document.getElementById('input-panel').style.display = 'block';
+          document.getElementById('molecule-info').style.display = 'block';
+          document.getElementById('viewer-container').style.display = 'block';
+          document.getElementById('ar-scene').style.display = 'none';
+          document.getElementById('ar-overlay').style.display = 'none';
+        }
+        
+        console.log('Switched to', section, 'section');
+      }
+      
+
+      
+      // Handle Enter key press
+      function handleKeyPress(event) {
+        if (event.key === 'Enter') {
+          generateMolecule();
+        }
+      }
+      
+      // Generate 3D molecule
+      async function generateMolecule() {
+        const input = document.getElementById('chemical-input').value.trim();
+        if (!input) {
+          alert('Please enter a chemical name, SMILES, or formula');
+          return;
+        }
+        
+        showLoading('Generating 3D structure...');
+        
+        try {
+          // Try to fetch molecule from PubChem API first
+          let moleculeData = await fetchFromPubChem(input);
+          
+          if (!moleculeData) {
+            // Fallback to predefined molecules
+            moleculeData = getPredefinedMolecule(input);
+          }
+          
+          if (!moleculeData) {
+            // Try AI generation for unknown compounds
+            console.log('Trying AI generation for:', input);
+            moleculeData = await generateMoleculeWithAI(input);
+          }
+          
+          if (moleculeData) {
+            await renderMolecule(moleculeData);
+            updateMoleculeInfo(moleculeData);
+            currentMolecule = moleculeData;
+          } else {
+            throw new Error('Could not generate molecule structure');
+          }
+          
+        } catch (error) {
+          console.error('Error generating molecule:', error);
+          alert('Error generating molecule. Please try a different chemical name.');
+        } finally {
+          hideLoading();
+        }
+      }
+      
+      // Fetch molecule from PubChem API
+      async function fetchFromPubChem(query) {
+        try {
+          // Search for compound
+          const searchResponse = await fetch(`https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/${encodeURIComponent(query)}/JSON`);
+          
+          if (!searchResponse.ok) {
+            return null;
+          }
+          
+          const searchData = await searchResponse.json();
+          
+          if (searchData.PC_Compounds && searchData.PC_Compounds.length > 0) {
+            const cid = searchData.PC_Compounds[0].id.id.cid;
+            
+            // Get 3D conformer
+            const conformerResponse = await fetch(`https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/cid/${cid}/record/SDF/?record_type=3d`);
+            
+            if (conformerResponse.ok) {
+              const sdfData = await conformerResponse.text();
+              
+              return {
+                name: query,
+                formula: getFormulaFromSDF(sdfData),
+                weight: getWeightFromSDF(sdfData),
+                type: 'PubChem',
+                sdf: sdfData
+              };
+            }
+          }
+          
+          return null;
+        } catch (error) {
+          console.error('PubChem API error:', error);
+          return null;
+        }
+      }
+      
+      // Gemini AI API Key (moved to global variables)
+      
+      // Generate molecule using Gemini AI
+      async function generateMoleculeWithAI(compoundName) {
+        try {
+          showLoading('Generating molecule with AI...');
+          
+          const prompt = `Generate a 3D molecular structure for ${compoundName}. Return ONLY a JSON object with this exact format:
+{
+  "name": "${compoundName}",
+  "formula": "chemical formula",
+  "weight": "molecular weight in g/mol",
+  "type": "AI Generated",
+  "atoms": [
+    {"element": "element symbol", "x": x_coordinate, "y": y_coordinate, "z": z_coordinate}
+  ],
+  "bonds": [
+    {"from": atom_index, "to": atom_index, "type": "single/double/triple"}
+  ]
+}
+
+Use realistic 3D coordinates. Keep coordinates between -2 and 2. Include all atoms and bonds.`;
+
+          const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              contents: [{
+                parts: [{
+                  text: prompt
+                }]
+              }]
+            })
+          });
+
+          const data = await response.json();
+          
+          if (data.candidates && data.candidates[0] && data.candidates[0].content) {
+            const aiResponse = data.candidates[0].content.parts[0].text;
+            
+            // Extract JSON from AI response
+            const jsonMatch = aiResponse.match(/\{[\s\S]*\}/);
+            if (jsonMatch) {
+              const moleculeData = JSON.parse(jsonMatch[0]);
+              console.log('AI Generated molecule:', moleculeData);
+              return moleculeData;
+            }
+          }
+          
+          throw new Error('Failed to parse AI response');
+        } catch (error) {
+          console.error('AI generation error:', error);
+          hideLoading();
+          return null;
+        }
+      }
+      
+      // Get predefined molecule data
+      function getPredefinedMolecule(query) {
+        const molecules = {
+          'water': {
+            name: 'Water',
+            formula: 'H₂O',
+            weight: '18.015 g/mol',
+            type: 'Predefined',
+            smiles: 'O',
+            atoms: [
+              {element: 'O', x: 0, y: 0, z: 0},
+              {element: 'H', x: 1.0, y: 0, z: 0},
+              {element: 'H', x: -0.5, y: 0.87, z: 0}
+            ],
+            bonds: [
+              {from: 0, to: 1, type: 'single'},
+              {from: 0, to: 2, type: 'single'}
+            ]
+          },
+          'methane': {
+            name: 'Methane',
+            formula: 'CH₄',
+            weight: '16.043 g/mol',
+            type: 'Predefined',
+            smiles: 'C',
+            atoms: [
+              {element: 'C', x: 0, y: 0, z: 0},
+              {element: 'H', x: 1.09, y: 0, z: 0},
+              {element: 'H', x: -0.36, y: 1.03, z: 0},
+              {element: 'H', x: -0.36, y: -0.52, z: 0.89},
+              {element: 'H', x: -0.36, y: -0.52, z: -0.89}
+            ],
+            bonds: [
+              {from: 0, to: 1, type: 'single'},
+              {from: 0, to: 2, type: 'single'},
+              {from: 0, to: 3, type: 'single'},
+              {from: 0, to: 4, type: 'single'}
+            ]
+          },
+          'ethanol': {
+            name: 'Ethanol',
+            formula: 'C₂H₆O',
+            weight: '46.069 g/mol',
+            type: 'Predefined',
+            smiles: 'CCO',
+            atoms: [
+              {element: 'C', x: 0, y: 0, z: 0},
+              {element: 'C', x: 1.54, y: 0, z: 0},
+              {element: 'O', x: 2.54, y: 0, z: 0},
+              {element: 'H', x: -0.36, y: 1.03, z: 0},
+              {element: 'H', x: -0.36, y: -0.52, z: 0.89},
+              {element: 'H', x: -0.36, y: -0.52, z: -0.89},
+              {element: 'H', x: 1.9, y: 1.03, z: 0},
+              {element: 'H', x: 1.9, y: -0.52, z: 0.89},
+              {element: 'H', x: 1.9, y: -0.52, z: -0.89},
+              {element: 'H', x: 2.9, y: 0, z: 0}
+            ],
+            bonds: [
+              {from: 0, to: 1, type: 'single'},
+              {from: 1, to: 2, type: 'single'},
+              {from: 0, to: 3, type: 'single'},
+              {from: 0, to: 4, type: 'single'},
+              {from: 0, to: 5, type: 'single'},
+              {from: 1, to: 6, type: 'single'},
+              {from: 1, to: 7, type: 'single'},
+              {from: 1, to: 8, type: 'single'},
+              {from: 2, to: 9, type: 'single'}
+            ]
+          },
+          'sulfuric acid': {
+            name: 'Sulfuric Acid',
+            formula: 'H₂SO₄',
+            weight: '98.079 g/mol',
+            type: 'Predefined',
+            smiles: 'OS(=O)(=O)O',
+            atoms: [
+              {element: 'S', x: 0, y: 0, z: 0},
+              {element: 'O', x: 1.43, y: 0, z: 0},
+              {element: 'O', x: -0.36, y: 1.38, z: 0},
+              {element: 'O', x: -0.36, y: -0.69, z: 1.19},
+              {element: 'O', x: -0.36, y: -0.69, z: -1.19},
+              {element: 'H', x: -1.32, y: 1.38, z: 0},
+              {element: 'H', x: -1.32, y: -0.69, z: 1.19}
+            ],
+            bonds: [
+              {from: 0, to: 1, type: 'double'},
+              {from: 0, to: 2, type: 'single'},
+              {from: 0, to: 3, type: 'single'},
+              {from: 0, to: 4, type: 'single'},
+              {from: 2, to: 5, type: 'single'},
+              {from: 3, to: 6, type: 'single'}
+            ]
+          },
+          'nitric acid': {
+            name: 'Nitric Acid',
+            formula: 'HNO₃',
+            weight: '63.013 g/mol',
+            type: 'Predefined',
+            smiles: 'O=N(=O)O',
+            atoms: [
+              {element: 'N', x: 0, y: 0, z: 0},
+              {element: 'O', x: 1.22, y: 0, z: 0},
+              {element: 'O', x: -0.61, y: 1.06, z: 0},
+              {element: 'O', x: -0.61, y: -1.06, z: 0},
+              {element: 'H', x: -1.57, y: 1.06, z: 0}
+            ],
+            bonds: [
+              {from: 0, to: 1, type: 'double'},
+              {from: 0, to: 2, type: 'single'},
+              {from: 0, to: 3, type: 'double'},
+              {from: 2, to: 4, type: 'single'}
+            ]
+          },
+          'carbon dioxide': {
+            name: 'Carbon Dioxide',
+            formula: 'CO₂',
+            weight: '44.009 g/mol',
+            type: 'Predefined',
+            smiles: 'O=C=O',
+            atoms: [
+              {element: 'C', x: 0, y: 0, z: 0},
+              {element: 'O', x: 1.16, y: 0, z: 0},
+              {element: 'O', x: -1.16, y: 0, z: 0}
+            ],
+            bonds: [
+              {from: 0, to: 1, type: 'double'},
+              {from: 0, to: 2, type: 'double'}
+            ]
+          },
+          'carbon monoxide': {
+            name: 'Carbon Monoxide',
+            formula: 'CO',
+            weight: '28.010 g/mol',
+            type: 'Predefined',
+            smiles: 'C#O',
+            atoms: [
+              {element: 'C', x: 0, y: 0, z: 0},
+              {element: 'O', x: 1.13, y: 0, z: 0}
+            ],
+            bonds: [
+              {from: 0, to: 1, type: 'triple'}
+            ]
+          }
+        };
+        
+        const lowerQuery = query.toLowerCase();
+        return molecules[lowerQuery] || null;
+      }
+      
+      // Render molecule in 3Dmol.js viewer
+      async function renderMolecule(moleculeData) {
+        if (!viewer) {
+          console.error('3Dmol.js viewer not initialized');
+          return;
+        }
+        
+        try {
+          // Clear previous molecule
+          viewer.clear();
+          
+          if (moleculeData.sdf) {
+            // Render from SDF data
+            viewer.addModel(moleculeData.sdf, "sdf");
+            viewer.setStyle({}, {stick: {}});
+            viewer.zoomTo();
+            console.log('Rendered from SDF data');
+          } else if (moleculeData.smiles) {
+            // Render from SMILES
+            viewer.addModel(moleculeData.smiles, "smi");
+            viewer.setStyle({}, {stick: {}});
+            viewer.zoomTo();
+            console.log('Rendered from SMILES:', moleculeData.smiles);
+          } else if (moleculeData.atoms && moleculeData.bonds) {
+            // Render from custom atom/bond data using 3Dmol.js
+            renderCustomMolecule3D(moleculeData);
+            console.log('Rendered from custom atom/bond data');
+          } else {
+            console.error('No valid molecule data found');
+            showMoleculeInfo(moleculeData);
+            return;
+          }
+          
+          console.log('Molecule rendered successfully:', moleculeData.name);
+          
+        } catch (error) {
+          console.error('Error rendering molecule:', error);
+          // Fallback to custom rendering
+          renderCustomMolecule3D(moleculeData);
+        }
+      }
+      
+      // Render custom molecule using 3Dmol.js
+      function renderCustomMolecule3D(moleculeData) {
+        if (!viewer) return;
+        
+        try {
+          // Create 3Dmol.js compatible data
+          let molData = "";
+          molData += `${moleculeData.atoms.length} ${moleculeData.bonds.length}\n`;
+          
+          // Add atoms
+          moleculeData.atoms.forEach((atom, index) => {
+            molData += `${atom.x.toFixed(3)} ${atom.y.toFixed(3)} ${atom.z.toFixed(3)} ${atom.element}\n`;
+          });
+          
+          // Add bonds
+          moleculeData.bonds.forEach(bond => {
+            molData += `${bond.from + 1} ${bond.to + 1} ${bond.type === 'double' ? 2 : bond.type === 'triple' ? 3 : 1}\n`;
+          });
+          
+          viewer.addModel(molData, "xyz");
+          viewer.setStyle({}, {stick: {}});
+          viewer.zoomTo();
+          console.log('Custom molecule rendered with 3Dmol.js');
+        } catch (error) {
+          console.error('Error rendering custom molecule:', error);
+          showMoleculeInfo(moleculeData);
+        }
+      }
+      
+      // Show molecule info when 3D rendering fails
+      function showMoleculeInfo(moleculeData) {
+        const container = document.getElementById('3dmol-container');
+        container.innerHTML = `
+          <div style="display: flex; align-items: center; justify-content: center; height: 100%; color: #333; font-size: 16px; text-align: center; padding: 20px;">
+            <div>
+              <h3>🧪 ${moleculeData.name}</h3>
+              <p><strong>Formula:</strong> ${moleculeData.formula}</p>
+              <p><strong>Molecular Weight:</strong> ${moleculeData.weight}</p>
+              <p><strong>Type:</strong> ${moleculeData.type}</p>
+              <p style="margin-top: 20px; color: #666;">3D visualization not available for this molecule</p>
+            </div>
+          </div>
+        `;
+      }
+      
+      // Render custom molecule from atom/bond data
+      function renderCustomMolecule(moleculeData) {
+        const atoms = moleculeData.atoms;
+        const bonds = moleculeData.bonds;
+        
+        try {
+          // Create atom objects for 3Dmol.js
+          const atomObjects = atoms.map((atom, index) => ({
+            elem: atom.element,
+            x: atom.x,
+            y: atom.y,
+            z: atom.z
+          }));
+          
+          // Create bond objects for 3Dmol.js
+          const bondObjects = bonds.map(bond => ({
+            from: bond.from,
+            to: bond.to,
+            order: bond.type === 'double' ? 2 : bond.type === 'triple' ? 3 : 1
+          }));
+          
+          // Add model to viewer
+          const model = {
+            atoms: atomObjects,
+            bonds: bondObjects
+          };
+          
+          viewer.addModel(model);
+          console.log('Custom molecule added to viewer:', model);
+          
+        } catch (error) {
+          console.error('Error in renderCustomMolecule:', error);
+          
+          // Fallback: create a simple sphere representation
+          atoms.forEach((atom, index) => {
+            const sphere = viewer.addSphere({
+              center: {x: atom.x, y: atom.y, z: atom.z},
+              radius: getAtomRadius(atom.element),
+              color: getAtomColor(atom.element)
+            });
+          });
+        }
+      }
+      
+      // Update molecule information panel
+      function updateMoleculeInfo(moleculeData) {
+        document.getElementById('molecule-name').textContent = moleculeData.name;
+        document.getElementById('molecule-formula').textContent = `Formula: ${moleculeData.formula}`;
+        document.getElementById('molecule-weight').textContent = `Molecular Weight: ${moleculeData.weight}`;
+        document.getElementById('molecule-type').textContent = `Type: ${moleculeData.type}`;
+        document.getElementById('molecule-info').style.display = 'block';
+      }
+      
+      // View molecule in AR
+      function viewInAR() {
+        if (!currentMolecule) {
+          alert('Please generate a molecule first');
+          return;
+        }
+        
+        // Switch to AR mode
+        document.getElementById('viewer-container').style.display = 'none';
+        document.getElementById('ar-scene').style.display = 'block';
+        document.getElementById('ar-overlay').style.display = 'block';
+        
+        // Render molecule in AR
+        if (currentMolecule.name.toLowerCase() === 'methane') {
+          renderMethaneInAR();
+        } else if (currentMolecule.name.toLowerCase() === 'water') {
+          renderWaterInAR();
+        } else if (currentMolecule.name.toLowerCase() === 'nitric acid') {
+          renderNitricAcidInAR();
+        } else if (currentMolecule.name.toLowerCase() === 'carbon dioxide') {
+          renderCarbonDioxideInAR();
+        } else {
+          renderMoleculeInAR(currentMolecule);
+        }
+        
+        console.log('Switched to AR mode');
+      }
+      
+      // Special rendering for methane to ensure correct tetrahedral structure
+      function renderMethaneInAR() {
+        const arMolecule = document.getElementById('ar-molecule');
+        arMolecule.innerHTML = '';
+        
+        console.log('Rendering methane in AR with correct tetrahedral geometry');
+        
+        // Methane: 1 carbon + 4 hydrogens in tetrahedral arrangement
+        const atoms = [
+          {element: 'C', x: 0, y: 0, z: 0},           // Carbon at center
+          {element: 'H', x: 1.09, y: 0, z: 0},        // H1: forward
+          {element: 'H', x: -0.36, y: 1.03, z: 0},    // H2: back-left
+          {element: 'H', x: -0.36, y: -0.52, z: 0.89}, // H3: back-right-up
+          {element: 'H', x: -0.36, y: -0.52, z: -0.89} // H4: back-right-down
+        ];
+        
+        const bonds = [
+          {from: 0, to: 1, type: 'single'}, // C-H1
+          {from: 0, to: 2, type: 'single'}, // C-H2
+          {from: 0, to: 3, type: 'single'}, // C-H3
+          {from: 0, to: 4, type: 'single'}  // C-H4
+        ];
+        
+        // Create carbon atom (center)
+        const carbon = document.createElement('a-sphere');
+        carbon.setAttribute('position', '0 0 0');
+        carbon.setAttribute('radius', '0.4');
+        carbon.setAttribute('color', '#888888');
+        carbon.setAttribute('material', 'shader: standard');
+        carbon.setAttribute('id', 'carbon-center');
+        arMolecule.appendChild(carbon);
+        
+        // Create hydrogen atoms
+        atoms.slice(1).forEach((atom, index) => {
+          const hydrogen = document.createElement('a-sphere');
+          hydrogen.setAttribute('position', `${atom.x} ${atom.y} ${atom.z}`);
+          hydrogen.setAttribute('radius', '0.3');
+          hydrogen.setAttribute('color', '#ffffff');
+          hydrogen.setAttribute('material', 'shader: standard');
+          hydrogen.setAttribute('id', `hydrogen-${index + 1}`);
+          arMolecule.appendChild(hydrogen);
+          
+          console.log(`Created hydrogen ${index + 1} at (${atom.x}, ${atom.y}, ${atom.z})`);
+        });
+        
+        // Create bonds
+        bonds.forEach((bond, index) => {
+          const atom1 = atoms[bond.from];
+          const atom2 = atoms[bond.to];
+          
+          const bondEntity = createBond(atom1, atom2, bond.type);
+          bondEntity.setAttribute('id', `methane-bond-${index}`);
+          arMolecule.appendChild(bondEntity);
+          
+          console.log(`Created methane bond ${index}: C to H${bond.to}`);
+        });
+        
+        // Scale the molecule
+        arMolecule.setAttribute('scale', '2 2 2');
+        
+        console.log('Methane rendered in AR with correct tetrahedral geometry');
+      }
+      
+      // Special rendering for water to ensure correct bent geometry
+      function renderWaterInAR() {
+        const arMolecule = document.getElementById('ar-molecule');
+        arMolecule.innerHTML = '';
+        
+        console.log('Rendering water in AR with correct bent geometry');
+        
+        // Water: 1 oxygen + 2 hydrogens in bent arrangement (104.5° angle)
+        const atoms = [
+          {element: 'O', x: 0, y: 0, z: 0},           // Oxygen at center
+          {element: 'H', x: 1.0, y: 0, z: 0},         // H1: to the right
+          {element: 'H', x: -0.5, y: 0.87, z: 0}      // H2: to the left and up
+        ];
+        
+        const bonds = [
+          {from: 0, to: 1, type: 'single'}, // O-H1
+          {from: 0, to: 2, type: 'single'}  // O-H2
+        ];
+        
+        // Create oxygen atom (center)
+        const oxygen = document.createElement('a-sphere');
+        oxygen.setAttribute('position', '0 0 0');
+        oxygen.setAttribute('radius', '0.4');
+        oxygen.setAttribute('color', '#ff0000');
+        oxygen.setAttribute('material', 'shader: standard');
+        oxygen.setAttribute('id', 'oxygen-center');
+        arMolecule.appendChild(oxygen);
+        
+        // Create hydrogen atoms
+        atoms.slice(1).forEach((atom, index) => {
+          const hydrogen = document.createElement('a-sphere');
+          hydrogen.setAttribute('position', `${atom.x} ${atom.y} ${atom.z}`);
+          hydrogen.setAttribute('radius', '0.3');
+          hydrogen.setAttribute('color', '#ffffff');
+          hydrogen.setAttribute('material', 'shader: standard');
+          hydrogen.setAttribute('id', `hydrogen-${index + 1}`);
+          arMolecule.appendChild(hydrogen);
+          
+          console.log(`Created hydrogen ${index + 1} at (${atom.x}, ${atom.y}, ${atom.z})`);
+        });
+        
+        // Create bonds
+        bonds.forEach((bond, index) => {
+          const atom1 = atoms[bond.from];
+          const atom2 = atoms[bond.to];
+          
+          const bondEntity = createBond(atom1, atom2, bond.type);
+          bondEntity.setAttribute('id', `water-bond-${index}`);
+          arMolecule.appendChild(bondEntity);
+          
+          console.log(`Created water bond ${index}: O to H${bond.to}`);
+        });
+        
+        // Scale the molecule
+        arMolecule.setAttribute('scale', '2 2 2');
+        
+        console.log('Water rendered in AR with correct bent geometry');
+      }
+      
+      // Render molecule in AR scene
+      function renderMoleculeInAR(moleculeData) {
+        const arMolecule = document.getElementById('ar-molecule');
+        arMolecule.innerHTML = '';
+        
+        if (moleculeData.atoms) {
+          console.log('Rendering molecule in AR:', moleculeData.name);
+          console.log('Atoms:', moleculeData.atoms);
+          console.log('Bonds:', moleculeData.bonds);
+          
+          // Create atoms
+          moleculeData.atoms.forEach((atom, index) => {
+            const atomEntity = document.createElement('a-sphere');
+            atomEntity.setAttribute('position', `${atom.x} ${atom.y} ${atom.z}`);
+            atomEntity.setAttribute('radius', getAtomRadius(atom.element));
+            atomEntity.setAttribute('color', getAtomColor(atom.element));
+            atomEntity.setAttribute('material', 'shader: standard');
+            atomEntity.setAttribute('id', `atom-${index}`);
+            arMolecule.appendChild(atomEntity);
+            
+            console.log(`Created atom ${index}: ${atom.element} at (${atom.x}, ${atom.y}, ${atom.z})`);
+          });
+          
+          // Create bonds
+          moleculeData.bonds.forEach((bond, index) => {
+            const atom1 = moleculeData.atoms[bond.from];
+            const atom2 = moleculeData.atoms[bond.to];
+            
+            if (atom1 && atom2) {
+              const bondEntity = createBond(atom1, atom2, bond.type);
+              bondEntity.setAttribute('id', `bond-${index}`);
+              arMolecule.appendChild(bondEntity);
+              
+              console.log(`Created bond ${index}: from atom ${bond.from} to atom ${bond.to}`);
+            }
+          });
+          
+          // Scale the molecule
+          arMolecule.setAttribute('scale', '2 2 2');
+          
+          console.log('Molecule rendered in AR successfully');
+        } else {
+          console.error('No atoms data found for AR rendering');
+        }
+      }
+      
+      // Get atom radius based on element
+      function getAtomRadius(element) {
+        const radii = {
+          'H': 0.3, 'C': 0.4, 'N': 0.4, 'O': 0.4, 'S': 0.5,
+          'P': 0.5, 'Cl': 0.5, 'F': 0.4, 'Br': 0.6, 'I': 0.7
+        };
+        return radii[element] || 0.4;
+      }
+      
+      // Get atom color based on element
+      function getAtomColor(element) {
+        const colors = {
+          'H': '#ffffff', 'C': '#888888', 'N': '#0000ff', 'O': '#ff0000', 'S': '#ffff00',
+          'P': '#ff8000', 'Cl': '#00ff00', 'F': '#00ffff', 'Br': '#800000', 'I': '#800080'
+        };
+        return colors[element] || '#888888';
+      }
+      
+      // Create bond between two atoms using multiple lines for thickness
+      function createBond(atom1, atom2, bondType) {
+        // Create a container entity for the bond
+        const bondEntity = document.createElement('a-entity');
+        
+        // Calculate the vector between atoms
+        const dx = atom2.x - atom1.x;
+        const dy = atom2.y - atom1.y;
+        const dz = atom2.z - atom1.z;
+        const distance = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        
+        // Normalize direction vector
+        const dirX = dx / distance;
+        const dirY = dy / distance;
+        const dirZ = dz / distance;
+        
+        // Create multiple parallel lines for thickness
+        const numLines = bondType === 'double' ? 5 : 3;
+        const offset = 0.02; // Small offset for parallel lines
+        
+        for (let i = 0; i < numLines; i++) {
+          const lineEntity = document.createElement('a-entity');
+          
+          // Calculate offset positions for parallel lines
+          const offsetX = (i - (numLines-1)/2) * offset * (dirY + dirZ);
+          const offsetY = (i - (numLines-1)/2) * offset * (dirX + dirZ);
+          const offsetZ = (i - (numLines-1)/2) * offset * (dirX + dirY);
+          
+          const startPos = {
+            x: atom1.x + offsetX,
+            y: atom1.y + offsetY,
+            z: atom1.z + offsetZ
+          };
+          
+          const endPos = {
+            x: atom2.x + offsetX,
+            y: atom2.y + offsetY,
+            z: atom2.z + offsetZ
+          };
+          
+          lineEntity.setAttribute('line', {
+            start: startPos,
+            end: endPos,
+            color: '#666666'
+          });
+          
+          lineEntity.setAttribute('material', 'linewidth: 8');
+          bondEntity.appendChild(lineEntity);
+        }
+        
+        console.log(`Created ${bondType} bond from (${atom1.x}, ${atom1.y}, ${atom1.z}) to (${atom2.x}, ${atom2.y}, ${atom2.z}) with ${numLines} lines`);
+        
+        return bondEntity;
+      }
+      
+      // Calculate rotation from direction vector
+      function calculateRotation(direction) {
+        const yaw = Math.atan2(direction.x, direction.z);
+        const pitch = Math.asin(-direction.y);
+        
+        return {
+          x: pitch * (180 / Math.PI),
+          y: yaw * (180 / Math.PI),
+          z: 0
+        };
+      }
+      
+      // Toggle UI visibility in AR mode
+      function toggleUI() {
+        const uiElements = document.getElementById('ar-ui-elements');
+        const toggleBtn = document.getElementById('ui-toggle');
+        
+        if (uiElements.style.display === 'none') {
+          uiElements.style.display = 'block';
+          toggleBtn.textContent = '🙈';
+          toggleBtn.title = 'Hide UI';
+        } else {
+          uiElements.style.display = 'none';
+          toggleBtn.textContent = '👁️';
+          toggleBtn.title = 'Show UI';
+        }
+      }
+      
+      // Generate molecule in AR mode
+      function generateMoleculeAR() {
+        const input = document.getElementById('ar-chemical-input').value.trim();
+        if (!input) {
+          alert('Please enter a chemical name');
+          return;
+        }
+        
+        generateMolecule().then(() => {
+          // Update AR molecule info
+          if (currentMolecule) {
+            document.getElementById('ar-molecule-name').textContent = currentMolecule.name;
+            document.getElementById('ar-molecule-formula').textContent = `Formula: ${currentMolecule.formula}`;
+            document.getElementById('ar-molecule-weight').textContent = `Weight: ${currentMolecule.weight}`;
+            
+            // Render in AR
+            renderMoleculeInAR(currentMolecule);
+          }
+        });
+      }
+      
+      // AI Chat Functions
+      function toggleAIChat() {
+        const chat = document.getElementById('ai-chat');
+        if (chat.style.display === 'none') {
+          chat.style.display = 'block';
+          document.getElementById('chat-input').focus();
+        } else {
+          chat.style.display = 'none';
+        }
+      }
+      
+      async function sendChatMessage() {
+        const input = document.getElementById('chat-input');
+        const message = input.value.trim();
+        if (!message) return;
+        
+        if (!currentMolecule) {
+          addChatMessage('Please generate a molecule first before asking questions.', 'ai');
+          return;
+        }
+        
+        // Add user message
+        addChatMessage(message, 'user');
+        input.value = '';
+        
+        // Show loading
+        addChatMessage('Thinking...', 'ai');
+        
+        try {
+          const response = await askAIAboutMolecule(message, currentMolecule);
+          // Remove loading message and add AI response
+          removeLastMessage();
+          addChatMessage(response, 'ai');
+        } catch (error) {
+          removeLastMessage();
+          addChatMessage('Sorry, I encountered an error. Please try again.', 'ai');
+        }
+      }
+      
+      function addChatMessage(message, sender) {
+        const messages = document.getElementById('chat-messages');
+        const messageDiv = document.createElement('div');
+        messageDiv.style.marginBottom = '10px';
+        messageDiv.style.padding = '8px';
+        messageDiv.style.borderRadius = '8px';
+        
+        if (sender === 'user') {
+          messageDiv.style.backgroundColor = '#e3f2fd';
+          messageDiv.style.textAlign = 'right';
+          messageDiv.innerHTML = `<strong>You:</strong> ${message}`;
+        } else {
+          messageDiv.style.backgroundColor = '#f5f5f5';
+          messageDiv.innerHTML = `<strong>AI:</strong> ${message}`;
+        }
+        
+        messages.appendChild(messageDiv);
+        messages.scrollTop = messages.scrollHeight;
+      }
+      
+      function removeLastMessage() {
+        const messages = document.getElementById('chat-messages');
+        if (messages.children.length > 0) {
+          messages.removeChild(messages.lastChild);
+        }
+      }
+      
+      async function askAIAboutMolecule(question, molecule) {
+        const prompt = `You are a chemistry expert. The user is looking at a 3D molecular structure of ${molecule.name} (${molecule.formula}) with molecular weight ${molecule.weight}.
+
+Molecule details:
+- Name: ${molecule.name}
+- Formula: ${molecule.formula}
+- Molecular Weight: ${molecule.weight}
+- Type: ${molecule.type}
+
+User question: "${question}"
+
+Please provide a helpful, educational response about this molecule. Focus on:
+1. Chemical properties and structure
+2. Real-world applications
+3. Safety considerations
+4. Interesting facts for students
+
+Keep your response concise but informative (2-3 paragraphs maximum).`;
+
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            contents: [{
+              parts: [{
+                text: prompt
+              }]
+            }]
+          })
+        });
+
+        const data = await response.json();
+        
+        if (data.candidates && data.candidates[0] && data.candidates[0].content) {
+          return data.candidates[0].content.parts[0].text;
+        } else {
+          throw new Error('Failed to get AI response');
+        }
+      }
+      
+      // Exit AR mode
+      function exitAR() {
+        document.getElementById('viewer-container').style.display = 'block';
+        document.getElementById('ar-scene').style.display = 'none';
+        document.getElementById('ar-overlay').style.display = 'none';
+        console.log('Exited AR mode');
+      }
+      
+      // Reset AR view
+      function resetARView() {
+        const arMolecule = document.getElementById('ar-molecule');
+        arMolecule.setAttribute('position', '0 0 0');
+        arMolecule.setAttribute('rotation', '0 0 0');
+        arMolecule.setAttribute('scale', '2 2 2');
+      }
+      
+      // Reset 3D view
+      function resetView() {
+        if (viewer) {
+          viewer.zoomTo();
+        }
+      }
+      
+      // Export molecule
+      function exportMolecule() {
+        if (!currentMolecule) {
+          alert('No molecule to export');
+          return;
+        }
+        
+        // Create export data
+        const exportData = {
+          name: currentMolecule.name,
+          formula: currentMolecule.formula,
+          weight: currentMolecule.weight,
+          type: currentMolecule.type,
+          atoms: currentMolecule.atoms,
+          bonds: currentMolecule.bonds
+        };
+        
+        // Create and download file
+        const dataStr = JSON.stringify(exportData, null, 2);
+        const dataBlob = new Blob([dataStr], {type: 'application/json'});
+        const url = URL.createObjectURL(dataBlob);
+        
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `${currentMolecule.name.replace(/\s+/g, '_')}.json`;
+        link.click();
+        
+        URL.revokeObjectURL(url);
+        console.log('Molecule exported');
+      }
+      
+      // Take screenshot
+      function screenshot() {
+        if (viewer) {
+          const canvas = viewer.getCanvas();
+          const link = document.createElement('a');
+          link.download = `${currentMolecule ? currentMolecule.name.replace(/\s+/g, '_') : 'molecule'}.png`;
+          link.href = canvas.toDataURL();
+          link.click();
+          console.log('Screenshot taken');
+        }
+      }
+      
+      // Take AR screenshot
+      function screenshotAR() {
+        // Capture AR scene
+        const arScene = document.getElementById('ar-scene');
+        const canvas = arScene.canvas;
+        
+        if (canvas) {
+          const link = document.createElement('a');
+          link.download = `${currentMolecule ? currentMolecule.name.replace(/\s+/g, '_') : 'molecule'}_AR.png`;
+          link.href = canvas.toDataURL();
+          link.click();
+          console.log('AR screenshot taken');
+        }
+      }
+      
+      // Show loading indicator
+      function showLoading(text) {
+        document.getElementById('loading-text').textContent = text;
+        document.getElementById('loading').style.display = 'block';
+      }
+      
+      // Hide loading indicator
+      function hideLoading() {
+        document.getElementById('loading').style.display = 'none';
+      }
+      
+      // Helper functions for SDF parsing
+      function getFormulaFromSDF(sdfData) {
+        // Extract formula from SDF data
+        const lines = sdfData.split('\n');
+        for (let i = 0; i < lines.length; i++) {
+          if (lines[i].includes('MF=')) {
+            return lines[i].split('MF=')[1].trim();
+          }
+        }
+        return 'Unknown';
+      }
+      
+      function getWeightFromSDF(sdfData) {
+        // Extract molecular weight from SDF data
+        const lines = sdfData.split('\n');
+        for (let i = 0; i < lines.length; i++) {
+          if (lines[i].includes('MW=')) {
+            return lines[i].split('MW=')[1].trim() + ' g/mol';
+          }
+        }
+        return 'Unknown';
+      }
+      
+      // Get atom radius based on element
+      function getAtomRadius(element) {
+        const radii = {
+          'H': 0.35,
+          'C': 0.45,
+          'N': 0.45,
+          'O': 0.45,
+          'F': 0.45,
+          'P': 0.55,
+          'S': 0.55,
+          'Cl': 0.55,
+          'Br': 0.55,
+          'I': 0.65
+        };
+        return radii[element] || 0.45;
+      }
+      
+      // Get atom color based on element
+      function getAtomColor(element) {
+        const colors = {
+          'H': '#ffffff',  // White
+          'C': '#808080',  // Gray
+          'N': '#0000ff',  // Blue
+          'O': '#ff0000',  // Red
+          'F': '#00ff00',  // Green
+          'P': '#ffa500',  // Orange
+          'S': '#ffff00',  // Yellow
+          'Cl': '#00ff00', // Green
+          'Br': '#8b4513', // Brown
+          'I': '#800080'   // Purple
+        };
+        return colors[element] || '#808080';
+      }
+      
+      // A-Frame gesture handler component for AR
+      AFRAME.registerComponent('gesture-handler', {
+        init: function () {
+          this.isDragging = false;
+          this.isScaling = false;
+          this.isRotating = false;
+          this.startDistance = 0;
+          this.startScale = { x: 2, y: 2, z: 2 };
+          this.startPosition = { x: 0, y: 0, z: 0 };
+          this.startRotation = { x: 0, y: 0, z: 0 };
+          this.lastTouchX = 0;
+          this.lastTouchY = 0;
+          this.startAngle = 0;
+          
+          this.minScale = 0.3;
+          this.maxScale = 8;
+          this.sensitivity = 0.02;
+          this.rotationSensitivity = 0.5;
+          
+          const scene = document.querySelector('a-scene');
+          scene.addEventListener('touchstart', this.onTouchStart.bind(this), { passive: false });
+          scene.addEventListener('touchmove', this.onTouchMove.bind(this), { passive: false });
+          scene.addEventListener('touchend', this.onTouchEnd.bind(this), { passive: false });
+        },
+        
+        onTouchStart: function (event) {
+          event.preventDefault();
+          
+          if (event.touches.length === 1) {
+            // Single finger = drag only
+            this.isDragging = true;
+            this.isRotating = false;
+            this.startPosition = this.el.getAttribute('position');
+            this.lastTouchX = event.touches[0].clientX;
+            this.lastTouchY = event.touches[0].clientY;
+          } else if (event.touches.length === 2) {
+            // Two fingers = scale and rotate
+            this.isScaling = true;
+            this.isRotating = true;
+            this.isDragging = false;
+            this.startDistance = this.getDistance(event.touches[0], event.touches[1]);
+            this.startScale = this.el.getAttribute('scale');
+            this.startRotation = this.el.getAttribute('rotation');
+            this.startAngle = this.getAngle(event.touches[0], event.touches[1]);
+          }
+        },
+        
+        onTouchMove: function (event) {
+          event.preventDefault();
+          
+          if (event.touches.length === 1 && this.isDragging) {
+            // Single finger drag - move molecule
+            const touch = event.touches[0];
+            const deltaX = touch.clientX - this.lastTouchX;
+            const deltaY = touch.clientY - this.lastTouchY;
+            
+            const currentPos = this.el.getAttribute('position');
+            const newPosition = {
+              x: currentPos.x + deltaX * this.sensitivity,
+              y: currentPos.y - deltaY * this.sensitivity,
+              z: currentPos.z
+            };
+            this.el.setAttribute('position', newPosition);
+            
+            this.lastTouchX = touch.clientX;
+            this.lastTouchY = touch.clientY;
+            
+          } else if (event.touches.length === 2 && (this.isScaling || this.isRotating)) {
+            // Two finger gesture - scale and rotate
+            const touch1 = event.touches[0];
+            const touch2 = event.touches[1];
+            
+            // Scaling
+            const currentDistance = this.getDistance(touch1, touch2);
+            const scaleFactor = currentDistance / this.startDistance;
+            
+            let newScale = {
+              x: this.startScale.x * scaleFactor,
+              y: this.startScale.y * scaleFactor,
+              z: this.startScale.z * scaleFactor
+            };
+            
+            // Apply scale limits
+            newScale.x = Math.max(this.minScale, Math.min(this.maxScale, newScale.x));
+            newScale.y = Math.max(this.minScale, Math.min(this.maxScale, newScale.y));
+            newScale.z = Math.max(this.minScale, Math.min(this.maxScale, newScale.z));
+            
+            this.el.setAttribute('scale', newScale);
+            
+            // Rotation
+            const currentAngle = this.getAngle(touch1, touch2);
+            const angleDelta = currentAngle - this.startAngle;
+            
+            const currentRot = this.el.getAttribute('rotation');
+            const newRotation = {
+              x: currentRot.x,
+              y: currentRot.y + angleDelta * this.rotationSensitivity,
+              z: currentRot.z
+            };
+            this.el.setAttribute('rotation', newRotation);
+          }
+        },
+        
+        onTouchEnd: function (event) {
+          this.isDragging = false;
+          this.isScaling = false;
+          this.isRotating = false;
+        },
+        
+        getDistance: function (touch1, touch2) {
+          const dx = touch1.clientX - touch2.clientX;
+          const dy = touch1.clientY - touch2.clientY;
+          return Math.sqrt(dx * dx + dy * dy);
+        },
+        
+        getAngle: function (touch1, touch2) {
+          return Math.atan2(touch2.clientY - touch1.clientY, touch2.clientX - touch1.clientX) * 180 / Math.PI;
+        }
+      });
+      
+      // View in AR function
+      function viewInAR() {
+        console.log('Switching to AR mode...');
+        
+        // Request permissions first
+        requestARPermissions().then(() => {
+          currentSection = 'ar';
+          
+          // Hide 3D viewer and show AR overlay
+          document.getElementById('viewer-container').style.display = 'none';
+          document.getElementById('ar-scene').style.display = 'block';
+          document.getElementById('ar-overlay').style.display = 'block';
+          
+          // Hide UI elements by default in AR mode
+          document.getElementById('ar-ui-elements').style.display = 'none';
+          
+          // Update AR molecule info if available
+          if (currentMolecule) {
+            document.getElementById('ar-molecule-name').textContent = currentMolecule.name;
+            document.getElementById('ar-molecule-formula').textContent = `Formula: ${currentMolecule.formula}`;
+            document.getElementById('ar-molecule-weight').textContent = `Weight: ${currentMolecule.weight}`;
+            renderMoleculeInAR(currentMolecule);
+          }
+        }).catch((error) => {
+          console.log('Permission denied, but continuing with AR:', error);
+          currentSection = 'ar';
+          
+          // Hide 3D viewer and show AR overlay
+          document.getElementById('viewer-container').style.display = 'none';
+          document.getElementById('ar-scene').style.display = 'block';
+          document.getElementById('ar-overlay').style.display = 'block';
+          
+          // Hide UI elements by default in AR mode
+          document.getElementById('ar-ui-elements').style.display = 'none';
+          
+          // Update AR molecule info if available
+          if (currentMolecule) {
+            document.getElementById('ar-molecule-name').textContent = currentMolecule.name;
+            document.getElementById('ar-molecule-formula').textContent = `Formula: ${currentMolecule.formula}`;
+            document.getElementById('ar-molecule-weight').textContent = `Weight: ${currentMolecule.weight}`;
+            renderMoleculeInAR(currentMolecule);
+          }
+        });
+      }
+      
+      async function requestARPermissions() {
+        console.log('Requesting AR permissions...');
+        const permissions = [];
+        
+        // Request device motion permission
+        if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
+          try {
+            const permission = await DeviceMotionEvent.requestPermission();
+            console.log('Device motion permission:', permission);
+            permissions.push(permission);
+          } catch (error) {
+            console.log('Device motion permission error:', error);
+          }
+        }
+        
+        // Request device orientation permission
+        if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+          try {
+            const permission = await DeviceOrientationEvent.requestPermission();
+            console.log('Device orientation permission:', permission);
+            permissions.push(permission);
+          } catch (error) {
+            console.log('Device orientation permission error:', error);
+          }
+        }
+        
+        return Promise.resolve(permissions);
+      }
+      
+      // Render molecule in AR
+      function renderMoleculeInAR(molecule) {
+        console.log('Rendering molecule in AR:', molecule.name);
+        
+        // Check for special rendering functions
+        if (molecule.name.toLowerCase() === 'methane') {
+          renderMethaneInAR();
+          return;
+        }
+        
+        if (molecule.name.toLowerCase() === 'water') {
+          renderWaterInAR();
+          return;
+        }
+        
+        if (molecule.name.toLowerCase() === 'nitric acid') {
+          renderNitricAcidInAR();
+          return;
+        }
+        
+        if (molecule.name.toLowerCase() === 'carbon dioxide') {
+          renderCarbonDioxideInAR();
+          return;
+        }
+        
+        // Generic rendering for other molecules
+        const arMolecule = document.getElementById('ar-molecule');
+        arMolecule.innerHTML = '';
+        
+        if (molecule.atoms && molecule.bonds) {
+          // Render atoms
+          molecule.atoms.forEach((atom, index) => {
+            const sphere = document.createElement('a-sphere');
+            sphere.setAttribute('position', `${atom.x} ${atom.y} ${atom.z}`);
+            sphere.setAttribute('radius', getAtomRadius(atom.element));
+            sphere.setAttribute('color', getAtomColor(atom.element));
+            sphere.setAttribute('material', 'shader: standard');
+            sphere.setAttribute('id', `atom-${index}`);
+            arMolecule.appendChild(sphere);
+          });
+          
+          // Render bonds
+          molecule.bonds.forEach((bond, index) => {
+            const atom1 = molecule.atoms[bond.from];
+            const atom2 = molecule.atoms[bond.to];
+            
+            const bondEntity = createBond(atom1, atom2, bond.type);
+            bondEntity.setAttribute('id', `bond-${index}`);
+            arMolecule.appendChild(bondEntity);
+          });
+          
+          arMolecule.setAttribute('scale', '2 2 2');
+        }
+      }
+      
+      // Test function to verify JavaScript is working
+      function testChat() {
+        alert('JavaScript is working! Chat functions should be available.');
+        console.log('Test function called successfully');
+      }
+
+      // AI Chat Functions
+      function toggleAIChat() {
+        console.log('toggleAIChat called');
+        alert('Toggle AI Chat function called!');
+        
+        const chat = document.getElementById('ai-chat');
+        console.log('Chat element:', chat);
+        
+        if (!chat) {
+          console.error('AI chat element not found!');
+          alert('AI chat element not found. Please refresh the page.');
+          return;
+        }
+        
+        if (chat.style.display === 'none' || chat.style.display === '') {
+          chat.style.display = 'block';
+          console.log('AI Chat shown');
+          alert('AI Chat is now visible!');
+          
+          // Add a test message to verify it's working
+          setTimeout(() => {
+            addChatMessage('Hello! I\'m your AI Chemistry Assistant. Ask me anything about the current molecule!', 'ai');
+          }, 100);
+        } else {
+          chat.style.display = 'none';
+          console.log('AI Chat hidden');
+          alert('AI Chat is now hidden!');
+        }
+      }
+
+      async function sendChatMessage() {
+        console.log('sendChatMessage called');
+        alert('Send message function called!');
+        
+        const input = document.getElementById('chat-input');
+        const message = input.value.trim();
+        
+        console.log('Message:', message);
+        console.log('Current molecule:', currentMolecule);
+        
+        if (!message) {
+          console.log('No message to send');
+          alert('Please enter a message first!');
+          return;
+        }
+        
+        if (!currentMolecule) {
+          console.log('No molecule loaded');
+          alert('Please generate a molecule first!');
+          addChatMessage('Please generate a molecule first to ask questions about it.', 'ai');
+          input.value = '';
+          return;
+        }
+        
+        // Add user message
+        addChatMessage(message, 'user');
+        input.value = '';
+        
+        // Add thinking message
+        addChatMessage('Thinking...', 'ai');
+        
+        try {
+          console.log('Calling AI...');
+          const response = await askAIAboutMolecule(message, currentMolecule);
+          removeLastMessage(); // Remove "Thinking..." message
+          addChatMessage(response, 'ai');
+          console.log('AI response received');
+          alert('AI response received!');
+        } catch (error) {
+          removeLastMessage(); // Remove "Thinking..." message
+          addChatMessage('Sorry, I encountered an error. Please try again.', 'ai');
+          console.error('AI Chat Error:', error);
+          alert('AI Error: ' + error.message);
+        }
+      }
+
+      function addChatMessage(message, sender) {
+        console.log('addChatMessage called:', message, sender);
+        const messages = document.getElementById('chat-messages');
+        console.log('Messages container:', messages);
+        
+        if (!messages) {
+          console.error('Chat messages container not found!');
+          return;
+        }
+        
+        const messageDiv = document.createElement('div');
+        messageDiv.style.marginBottom = '8px';
+        messageDiv.style.padding = '8px 12px';
+        messageDiv.style.borderRadius = '8px';
+        messageDiv.style.maxWidth = '80%';
+        messageDiv.style.wordWrap = 'break-word';
+        
+        if (sender === 'user') {
+          messageDiv.style.backgroundColor = '#4285f4';
+          messageDiv.style.color = 'white';
+          messageDiv.style.marginLeft = 'auto';
+          messageDiv.style.textAlign = 'right';
+        } else {
+          messageDiv.style.backgroundColor = '#f1f3f4';
+          messageDiv.style.color = '#333';
+        }
+        
+        messageDiv.textContent = message;
+        messages.appendChild(messageDiv);
+        messages.scrollTop = messages.scrollHeight;
+        console.log('Message added successfully');
+      }
+
+      function removeLastMessage() {
+        const messages = document.getElementById('chat-messages');
+        if (messages.children.length > 0) {
+          messages.removeChild(messages.lastChild);
+        }
+      }
+
+      async function askAIAboutMolecule(question, molecule) {
+        const prompt = `You are a chemistry expert. The user is looking at a 3D molecular structure of ${molecule.name} (${molecule.formula}) with molecular weight ${molecule.weight}.
+
+Molecule details:
+- Name: ${molecule.name}
+- Formula: ${molecule.formula}
+- Molecular Weight: ${molecule.weight}
+- Type: ${molecule.type}
+
+User question: "${question}"
+
+Please provide a helpful, educational response about this molecule. Focus on:
+1. Chemical properties and structure
+2. Real-world applications
+3. Safety considerations
+4. Interesting facts for students
+
+Keep your response concise but informative (2-3 paragraphs maximum).`;
+
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+        });
+        const data = await response.json();
+        if (data.candidates && data.candidates[0] && data.candidates[0].content) {
+          return data.candidates[0].content.parts[0].text;
+        } else {
+          throw new Error('Failed to get AI response');
+        }
+      }
+
+      // Screenshot Functions
+      function takeScreenshot() {
+        try {
+          if (currentSection === 'ar') {
+            // For AR mode, use A-Frame's built-in screenshot
+            const arScene = document.querySelector('a-scene');
+            if (arScene && arScene.renderer) {
+              // Create a temporary canvas
+              const canvas = document.createElement('canvas');
+              const gl = arScene.renderer.getContext();
+              
+              canvas.width = gl.drawingBufferWidth;
+              canvas.height = gl.drawingBufferHeight;
+              
+              // Read pixels from WebGL context
+              const pixels = new Uint8Array(gl.drawingBufferWidth * gl.drawingBufferHeight * 4);
+              gl.readPixels(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+              
+              // Create ImageData and put it on canvas
+              const context = canvas.getContext('2d');
+              const imageData = context.createImageData(gl.drawingBufferWidth, gl.drawingBufferHeight);
+              
+              // Flip the image vertically (WebGL reads from bottom to top)
+              for (let y = 0; y < gl.drawingBufferHeight; y++) {
+                for (let x = 0; x < gl.drawingBufferWidth; x++) {
+                  const srcIndex = (y * gl.drawingBufferWidth + x) * 4;
+                  const dstIndex = ((gl.drawingBufferHeight - 1 - y) * gl.drawingBufferWidth + x) * 4;
+                  
+                  imageData.data[dstIndex] = pixels[srcIndex];     // Red
+                  imageData.data[dstIndex + 1] = pixels[srcIndex + 1]; // Green
+                  imageData.data[dstIndex + 2] = pixels[srcIndex + 2]; // Blue
+                  imageData.data[dstIndex + 3] = pixels[srcIndex + 3]; // Alpha
+                }
+              }
+              
+              context.putImageData(imageData, 0, 0);
+              downloadScreenshot(canvas);
+            } else {
+              alert('AR scene not available for screenshot');
+            }
+          } else {
+            // For 3D viewer mode, capture the viewer container
+            const viewerContainer = document.getElementById('3dmol-container');
+            if (viewerContainer && viewer) {
+              // Use 3Dmol.js built-in screenshot capability
+              const canvas = viewer.canvas;
+              if (canvas) {
+                downloadScreenshot(canvas);
+              } else {
+                alert('3D viewer not available for screenshot');
+              }
+            } else {
+              alert('3D viewer not available for screenshot');
+            }
+          }
+        } catch (error) {
+          console.error('Screenshot error:', error);
+          alert('Screenshot failed. Please try again.');
+        }
+      }
+
+      function downloadScreenshot(canvas) {
+        const link = document.createElement('a');
+        link.download = `molecule-${currentMolecule ? currentMolecule.name : 'view'}-${Date.now()}.png`;
+        link.href = canvas.toDataURL();
+        link.click();
+      }
+
+      // Additional missing functions
+      function exitAR() {
+        currentSection = 'chemistry';
+        document.getElementById('ar-scene').style.display = 'none';
+        document.getElementById('ar-overlay').style.display = 'none';
+        document.getElementById('viewer-container').style.display = 'block';
+        document.getElementById('input-panel').style.display = 'block';
+        document.getElementById('molecule-info').style.display = 'block';
+        document.getElementById('section-tabs').style.display = 'block';
+      }
+
+      function resetARView() {
+        const arMolecule = document.getElementById('ar-molecule');
+        if (arMolecule) {
+          arMolecule.setAttribute('position', '0 0 0');
+          arMolecule.setAttribute('rotation', '0 0 0');
+          arMolecule.setAttribute('scale', '1 1 1');
+        }
+      }
+
+      function resetView() {
+        if (viewer) {
+          viewer.zoomTo();
+        }
+      }
+
+      function exportMolecule() {
+        if (!currentMolecule) {
+          alert('No molecule to export');
+          return;
+        }
+        
+        const data = JSON.stringify(currentMolecule, null, 2);
+        const blob = new Blob([data], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `${currentMolecule.name}-molecule.json`;
+        link.click();
+        URL.revokeObjectURL(url);
+      }
+
+      function toggleUI() {
+        const uiElements = document.getElementById('ar-ui-elements');
+        const toggleBtn = document.getElementById('ui-toggle');
+        
+        if (uiElements.style.display === 'none' || uiElements.style.display === '') {
+          uiElements.style.display = 'block';
+          toggleBtn.textContent = '🙈';
+        } else {
+          uiElements.style.display = 'none';
+          toggleBtn.textContent = '👁️';
+        }
+      }
+
+      function generateMoleculeAR() {
+        const input = document.getElementById('ar-chemical-input');
+        const chemicalName = input.value.trim();
+        
+        if (chemicalName) {
+          generateMolecule(chemicalName);
+        }
+      }
+
+      // Handle Enter key press in input fields
+      function handleKeyPress(event) {
+        if (event.key === 'Enter') {
+          if (currentSection === 'ar') {
+            generateMoleculeAR();
+          } else {
+            generateMolecule();
+          }
+        }
+      }
+
+      // Handle Enter key press in chat input
+      function handleChatKeyPress(event) {
+        if (event.key === 'Enter') {
+          sendChatMessage();
+        }
+      }
+
+
+
+      // Permission handling functions
+      function showPermissionModal() {
+        document.getElementById('permission-modal').style.display = 'flex';
+      }
+      
+      function hidePermissionModal() {
+        document.getElementById('permission-modal').style.display = 'none';
+      }
+      
+      async function requestPermissions() {
+        console.log('Requesting permissions...');
+        try {
+          // Request device motion permission
+          if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
+            console.log('Requesting device motion permission...');
+            const permission = await DeviceMotionEvent.requestPermission();
+            console.log('Device motion permission result:', permission);
+            if (permission === 'granted') {
+              console.log('Device motion permission granted');
+            } else {
+              console.log('Device motion permission denied');
+            }
+          } else {
+            console.log('DeviceMotionEvent.requestPermission not available');
+          }
+          
+          // Request device orientation permission
+          if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+            console.log('Requesting device orientation permission...');
+            const permission = await DeviceOrientationEvent.requestPermission();
+            console.log('Device orientation permission result:', permission);
+            if (permission === 'granted') {
+              console.log('Device orientation permission granted');
+            } else {
+              console.log('Device orientation permission denied');
+            }
+          } else {
+            console.log('DeviceOrientationEvent.requestPermission not available');
+          }
+          
+          hidePermissionModal();
+        } catch (error) {
+          console.log('Permission request failed:', error);
+          hidePermissionModal();
+        }
+      }
+      
+      // Mobile optimization
+      function optimizeForMobile() {
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        
+        if (isMobile) {
+          // Adjust UI for mobile
+          document.body.style.fontSize = '14px';
+          
+          // Add touch-friendly styles
+          const buttons = document.querySelectorAll('.btn, .ar-btn, .tab-btn');
+          buttons.forEach(btn => {
+            btn.style.minHeight = '44px'; // iOS minimum touch target
+            btn.style.touchAction = 'manipulation';
+          });
+          
+          // Prevent zoom on input focus
+          const inputs = document.querySelectorAll('input');
+          inputs.forEach(input => {
+            input.addEventListener('focus', () => {
+              input.style.fontSize = '16px';
+            });
+          });
+        }
+      }
+      
+      // Initialize mobile optimizations
+      document.addEventListener('DOMContentLoaded', function() {
+        optimizeForMobile();
+        
+        // Set up permission modal event listeners
+        document.getElementById('allow-permissions-btn').addEventListener('click', function() {
+          console.log('Allow permissions button clicked');
+          requestPermissions();
+        });
+        
+        document.getElementById('continue-without-btn').addEventListener('click', function() {
+          console.log('Continue without button clicked');
+          hidePermissionModal();
+        });
+        
+        // Show permission modal on first visit
+        if (localStorage.getItem('permissionShown') !== 'true') {
+          setTimeout(() => {
+            showPermissionModal();
+            localStorage.setItem('permissionShown', 'true');
+          }, 1000);
+        }
+        
+        // Alternative: Trigger permissions on user interaction
+        document.addEventListener('click', function() {
+          if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
+            DeviceMotionEvent.requestPermission().then(function(permission) {
+              console.log('Device motion permission:', permission);
+            }).catch(function(error) {
+              console.log('Device motion permission error:', error);
+            });
+          }
+        }, { once: true });
+      });
+    </script>
+  </body>
+</html> 

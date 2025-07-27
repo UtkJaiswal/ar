@@ -1,20 +1,28 @@
-#!/usr/bin/env python3
 import http.server
-import ssl
 import socketserver
 import os
 
-# Change to the directory containing this script
-os.chdir(os.path.dirname(os.path.abspath(__file__)))
+# --- Configuration ---
+# Get the port from the environment variable provided by the deployment platform (e.g., Render, Heroku).
+# Default to 8000 for local development if the PORT variable isn't set.
+PORT = int(os.environ.get('PORT', 8000))
 
-# Create HTTPS server
-context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-context.load_cert_chain('cert.pem', 'key.pem')
+# --- Server Setup ---
 
-# Create server
-with socketserver.TCPServer(("", 8443), http.server.SimpleHTTPRequestHandler) as httpd:
-    httpd.socket = context.wrap_socket(httpd.socket, server_side=True)
-    print("HTTPS server running on https://localhost:8443")
-    print("For iPhone access, use your computer's IP address instead of localhost")
-    print("Example: https://192.168.68.111:8443")
-    httpd.serve_forever() 
+# This handler will serve files from the directory it's run from.
+Handler = http.server.SimpleHTTPRequestHandler
+
+# --- Create and Run the Server ---
+# We create a standard TCPServer. The deployment platform will handle HTTPS.
+with socketserver.TCPServer(("", PORT), Handler) as httpd:
+    print("=====================================================================")
+    print(f"  HTTP server starting on port: {PORT}")
+    print("  This server is ready for deployment on a platform that handles SSL.")
+    print("=====================================================================")
+
+    try:
+        # Start the server and keep it running.
+        httpd.serve_forever()
+    except KeyboardInterrupt:
+        print("\nServer stopped by user.")
+        pass
